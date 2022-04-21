@@ -1,0 +1,108 @@
+
+Assessment of Steps taken by an individual over a 2month period
+=================================================================
+
+
+# Data Processing: 
+Initially, the data was loaded into R, then assessed to establish the details: 
+```{r echo=TRUE}
+# Load librarys: 
+library(dplyr)
+library(tidyverse)
+library(lubridate)
+library(imputeTS)
+library(ggplot2)
+
+file <- "repdata_data_activity/activity.csv"
+data <- read.csv(file, header = TRUE, sep = ",")
+summary(data)
+
+#Correcting the time steps: 
+new_interval <- format(round((data$interval/100),2),nsmall = 2)
+new_interval2 <- data.frame(do.call(rbind,strsplit(new_interval,"\\.")))
+colnames(new_interval2) <- c("hours","minutes")
+new_interval2$hours <- as.numeric(new_interval2$hours)
+new_interval2$minutes <- as.numeric(new_interval2$minutes)
+new_interval3 <- new_interval2 %>% mutate(IntervalTime = paste(hours,":",minutes, sep = ""))
+NewTime <- strptime(new_interval3$IntervalTime, format = "%H:%M")
+data$timeint <- NewTime
+
+```
+
+# What is mean total number of steps taken per day?
+The number of steps vary per day, however, in the histogram below we can see the spread of the data - it is evident that the majority of days the individual does between 10000 and 15000 steps:  
+```{r echo = true}
+
+total_day <- data %>% group_by(date) %>% summarise(steps = sum(steps, na.rm=TRUE))
+hist(total_day$steps, 
+     main="Histogram of the frequency of days with binned total steps", 
+     xlab="Steps")
+
+```
+
+Below is a boxplot showing the median and the mean, as well a slightly differentt view of the spread of the total steps per day. The mean number of steps taken is `r mean(total_day$steps,na.rm=TRUE)`, with the median equal to `r median(total_day$steps, na.rm=TRUE)`. 
+
+```{r echo = TRUE}
+boxplot(total_day$steps, main = "Boxplot of  spread of total steps taken per day", 
+        ylab = "Steps")
+abline(h = mean(total_day$steps,na.rm=TRUE),col = "blue")
+
+```
+
+# What is the average daily activity pattern?
+
+```{r echo = TRUE}
+average_day <- data %>% group_by(timeint) %>% summarise(steps = mean(steps,na.rm=TRUE))
+
+index <- which.max(average_day$steps)
+plot(average_day, type = "l", main = "Average Daily Step Pattern", xlab = "Hours", ylab = "Steps")
+
+```
+The average daily pattern shows minimal activity until around 6am, thereafter the steps increase to a peak at `r time_interval[index]` hours, or roughly 9am. Thereafter the steps for the rest of the day, until around 7pm are steady, with a drop off after. There are no steps after 11pm. 
+
+
+# Imputing missing values
+There are a number of missing values, noted in the below table, with NAs accounting for `r sum(is.na(data))` rows. This is `r sum(is.na(data))*100/17568`%. 
+
+```{r echo = TRUE}
+data2 <- data
+# Using the mean of the interval to calculate missing values: 
+data2 <- data2 %>% 
+  group_by(interval) %>% 
+  mutate(steps = ifelse(is.na(steps), 
+                       mean(steps, na.rm=TRUE), steps))
+
+total_day2 <- data2 %>% group_by(date) %>% summarise(steps = sum(steps, na.rm=TRUE))
+hist(total_day2$steps, 
+     main="Corrected data: Histogram of the frequency of days with binned total steps", 
+     xlab="Steps")
+
+```
+The adjusted mean for the data is `r mean(total_day2$steps,na.rm=TRUE)` and the median is `r median(total_day2$steps, na.rm=TRUE)`. This is an increase of `r mean(total_day2$steps,na.rm=TRUE)-mean(total_day2$steps,na.rm=TRUE)` mean steps per day. 
+
+#Are there differences in activity patterns between weekdays and weekends?
+
+
+```{r echo = TRUE}
+
+## credit: this is taken from a stackoverflow solution:
+options(dplyr.summarise.inform = FALSE)
+weekdays1 <- c('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday')
+data2$WDay <- factor((data2$day %in% weekdays1), 
+                   levels=c(FALSE, TRUE), labels=c('weekend', 'weekday'))
+data2$timeint2 <- as.POSIXct(data2$timeint)
+
+WeekdaySummary <- data2 %>% group_by(WDay,timeint2) %>% summarise(steps = mean(steps))
+
+ggplot(WeekdaySummary, aes(timeint2,steps)) + 
+    geom_line(color = "red", size = 2) +
+    scale_x_datetime(labels = label_date("%H:%M:%S")) +
+    labs(title = "Average steps taken between Weekdays and Weekend") + xlab("Time") + ylab("Steps") +
+    facet_wrap(~WDay)
+
+```
+
+
+
+
+
